@@ -1,0 +1,35 @@
+{
+  "main": "index.html",
+  "logo": "logo-v2.png",
+  "preload": "preload.js",
+  "pluginSetting": {
+    "single": true,
+    "height": 620
+  },
+  "features": [
+    {
+      "code": "bitwarden-search",
+      "explain": "搜索 Bitwarden 密码并复制密码、用户名或 TOTP",
+      "cmds": [
+        "bw",
+        "bitwarden",
+        "Bitwarden",
+        "密码",
+        "搜索密码"
+      ]
+    },
+    {
+      "code": "bitwarden-url",
+      "explain": "按网址搜索 Bitwarden 登录项",
+      "cmds": [
+        {
+          "type": "regex",
+          "label": "Bitwarden 按网址搜索",
+          "match": "/^https?:\\/\\/[^\\s]+$|^[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+(:[0-9]{1,5})?(\\/[^\\s]*)?$/i",
+          "minLength": 3,
+          "maxLength": 2048
+        }
+      ]
+    }
+  ]
+}

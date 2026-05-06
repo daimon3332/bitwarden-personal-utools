@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bitwarden uTools</title>
+    <link rel="stylesheet" href="./index.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <img src="./logo.svg" alt="" />
+          <div>
+            <h1>Bitwarden</h1>
+            <p id="statusText">正在检查 CLI 状态...</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button id="syncBtn" class="ghost" title="同步并刷新缓存 Ctrl+R">同步</button>
+          <button id="settingsBtn" class="ghost" title="连接设置">设置</button>
+        </div>
+      </header>
+
+      <section id="setupPanel" class="panel hidden">
+        <h2>连接 Bitwarden CLI</h2>
+        <p class="hint">
+          一次性保存 Client ID、Client Secret 和主密码。插件只在首次配置或手动同步时连接 CLI 并更新本地缓存。
+        </p>
+        <div class="grid">
+          <label>
+            Client ID
+            <input id="clientIdInput" autocomplete="off" spellcheck="false" placeholder="user.xxxxx 或 organization.xxxxx" />
+          </label>
+          <label>
+            Client Secret
+            <input id="clientSecretInput" type="password" autocomplete="off" spellcheck="false" placeholder="client_secret" />
+          </label>
+          <label>
+            主密码
+            <input id="setupMasterPasswordInput" type="password" autocomplete="current-password" placeholder="用于自动解锁，已保存可留空" />
+          </label>
+          <label>
+            bw 路径
+            <input id="bwPathInput" autocomplete="off" spellcheck="false" placeholder="默认：bw" />
+          </label>
+          <label class="checkline">
+            <input id="saveCredentialInput" type="checkbox" checked />
+            保存 Client ID / Secret / 主密码，用于自动登录和自动解锁
+          </label>
+        </div>
+        <div class="row">
+          <button id="loginBtn">保存配置并连接</button>
+          <button id="checkBtn" class="ghost">加载缓存</button>
+        </div>
+      </section>
+
+      <section id="unlockPanel" class="panel hidden">
+        <h2>解锁 Vault</h2>
+        <p class="hint">如果上面的主密码未保存或已失效，可在这里重新输入；成功后会保存用于下次自动解锁。</p>
+        <div class="unlock-row">
+          <input id="masterPasswordInput" type="password" autocomplete="current-password" placeholder="输入 Bitwarden 主密码" />
+          <button id="unlockBtn">解锁</button>
+        </div>
+      </section>
+
+      <main id="searchPanel" class="hidden">
+        <div class="searchbar">
+          <select id="modeSelect" title="搜索模式">
+            <option value="all">综合</option>
+            <option value="name">Name</option>
+            <option value="url">URL</option>
+            <option value="folder" selected>文件夹</option>
+          </select>
+          <input id="queryInput" spellcheck="false" autocomplete="off" placeholder="默认按文件夹搜索；支持 f: totp 或 f totp" />
+        </div>
+
+        <div class="tips">
+          <span>Enter 复制 TOTP</span>
+          <span>Ctrl+T 复制密码</span>
+          <span>Ctrl+U 复制用户名</span>
+          <span>↑↓ 选择</span>
+        </div>
+
+        <div id="message" class="message hidden"></div>
+        <ul id="results" class="results"></ul>
+      </main>
+    </div>
+
+    <script src="./index.js"></script>
+  </body>
+</html>
