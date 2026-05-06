@@ -1,12 +1,12 @@
 # Bitwarden uTools 插件
 
-用 uTools 快速搜索 Bitwarden 密码库，并复制密码、用户名、TOTP。
+一个面向个人电脑使用的 uTools Bitwarden 快速搜索与复制插件，重点优化 TOTP 场景：打开快、搜索快、复制快。
 
 ## 功能
 
 - 默认按文件夹搜索，适合优先搜索 TOTP 文件夹里的条目
-- 综合搜索：`name` / `username` / `url` / `folder`
-- 模糊搜索：本地二次排序，支持少量拼写误差、子序列匹配
+- 支持综合搜索：`name` / `username` / `url` / `folder`
+- 支持模糊搜索：本地二次排序，支持少量拼写误差和子序列匹配
 - 按 Name 搜索：选择 `Name` 或输入 `n: github`
 - 按 URL 搜索：选择 `URL` 或输入 `u: github.com`
 - 按文件夹搜索：选择 `文件夹` 或输入 `f: 工作 github` / `f 工作 github`
@@ -17,9 +17,9 @@
 
 ## 连接方式
 
-插件通过本机 Bitwarden CLI 调用，不直接保存或处理远程 vault 数据。
+插件通过本机 Bitwarden CLI 获取数据，不直接调用 Bitwarden 远程 API。
 
-1. 安装并确保 `bw --version` 可用。
+1. 安装 Bitwarden CLI，并确保 `bw --version` 可用。
 2. 打开插件，填写一次性配置：
    - Client ID
    - Client Secret
@@ -31,16 +31,25 @@
 
 如果需要最新数据，点击插件右上角“同步”或按 `Ctrl+R`。
 
-为了实现最快复制，本插件会在同步时把密码和 TOTP 种子一起缓存到本地。复制密码/TOTP 时优先使用本地缓存，不再调用 CLI，因此可以即时复制。
+## 极速复制模式
 
-> Client ID / Secret / 主密码会保存到 uTools 存储中，优先使用 `utools.dbCryptoStorage`。
+为了实现即时复制，本插件会在同步时把以下数据缓存到本地：
+
+- 搜索字段：名称、用户名、网址、文件夹名、条目 ID
+- 密码明文
+- TOTP 种子
+
+复制密码/TOTP 时会优先使用本地缓存，不再调用 CLI，因此复制速度接近即时。
+
+TOTP 会在插件内根据本地缓存的种子实时生成当前验证码，支持普通 TOTP、`otpauth://` URI 和 `steam://` 格式。
 
 ## 安全说明
 
-- 本地缓存会保存搜索字段、密码明文和 TOTP 种子，用于极速复制。
+- Client ID / Client Secret / 主密码会保存到 uTools 存储中，优先使用 `utools.dbCryptoStorage`。
+- 本地缓存会保存密码明文和 TOTP 种子，仅建议在个人可信设备上使用。
 - 修改 Bitwarden 数据后，需要手动同步刷新本地缓存。
 - `BW_SESSION` 只保存在插件 preload 进程内存中，插件进程结束后失效。
-- 只建议在个人电脑使用；不建议在共享电脑上保存 Client Secret、主密码、密码缓存和 TOTP 缓存。
+- 不建议在共享电脑上保存 Client Secret、主密码、密码缓存和 TOTP 缓存。
 
 ## 开发调试
 
@@ -49,5 +58,5 @@
 核心文件：
 
 - `plugin.json`：uTools 指令配置
-- `preload.js`：Bitwarden CLI 封装
+- `preload.js`：Bitwarden CLI 封装、本地缓存、TOTP 生成
 - `index.html` / `index.js` / `index.css`：插件界面
