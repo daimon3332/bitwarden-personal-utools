@@ -45,6 +45,7 @@ function cleanError(err, stderr, stdout) {
 function readSettings() {
   const storage = getStorage();
   const value = storage?.getItem(STORAGE_KEY) || {};
+  const customFolderNames = normalizeCustomFolderNames(value.customFolderNames, value.customFolderName);
   return {
     clientId: value.clientId || "",
     clientSecret: value.clientSecret || "",
@@ -52,7 +53,8 @@ function readSettings() {
     hasMasterPassword: Boolean(value.masterPassword),
     bwPath: value.bwPath || "",
     serverUrl: value.serverUrl || DEFAULT_SERVER_URL,
-    customFolderName: value.customFolderName || "",
+    customFolderNames,
+    customFolderName: customFolderNames[0] || "",
     saveCredentials: Boolean(value.saveCredentials),
     secureStorage: hasCryptoStorage(),
   };
@@ -66,6 +68,7 @@ function getSettings() {
     hasMasterPassword: settings.hasMasterPassword,
     bwPath: settings.bwPath,
     serverUrl: settings.serverUrl || DEFAULT_SERVER_URL,
+    customFolderNames: settings.customFolderNames || [],
     customFolderName: settings.customFolderName || "",
     saveCredentials: settings.saveCredentials,
     secureStorage: settings.secureStorage,
@@ -79,18 +82,34 @@ function normalizeServerUrl(value) {
   return `https://${raw}`.replace(/\/+$/, "");
 }
 
+function normalizeCustomFolderNames(value, legacyName = "") {
+  const input = Array.isArray(value) ? value : [];
+  const names = [...input, legacyName]
+    .map((name) => String(name || "").trim())
+    .filter(Boolean);
+  const seen = new Set();
+  return names.filter((name) => {
+    const key = name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function saveSettings(input) {
   const storage = getStorage();
   if (!storage) return getSettings();
   const existing = readSettings();
 
+  const customFolderNames =
+    Array.isArray(input?.customFolderNames)
+      ? normalizeCustomFolderNames(input.customFolderNames)
+      : normalizeCustomFolderNames(existing.customFolderNames, existing.customFolderName);
   const next = {
     bwPath: String(input?.bwPath || "").trim(),
     serverUrl: normalizeServerUrl(input?.serverUrl || existing.serverUrl || DEFAULT_SERVER_URL),
-    customFolderName:
-      typeof input?.customFolderName === "string"
-        ? input.customFolderName.trim()
-        : existing.customFolderName || "",
+    customFolderNames,
+    customFolderName: customFolderNames[0] || "",
     saveCredentials: Boolean(input?.saveCredentials),
   };
   if (next.saveCredentials) {
@@ -108,8 +127,13 @@ function saveSettings(input) {
 }
 
 function setCustomFolderName(name) {
+  return setCustomFolderNames(String(name || "").trim() ? [name] : []);
+}
+
+function setCustomFolderNames(names) {
   const storage = getStorage();
   const existing = readSettings();
+  const customFolderNames = normalizeCustomFolderNames(names);
   const next = {
     clientId: existing.clientId,
     clientSecret: existing.clientSecret,
@@ -117,7 +141,8 @@ function setCustomFolderName(name) {
     bwPath: existing.bwPath,
     serverUrl: existing.serverUrl || DEFAULT_SERVER_URL,
     saveCredentials: existing.saveCredentials,
-    customFolderName: String(name || "").trim(),
+    customFolderNames,
+    customFolderName: customFolderNames[0] || "",
   };
   storage?.setItem(STORAGE_KEY, next);
   return getSettings();
@@ -512,7 +537,8 @@ function scoreItem(item, query, mode) {
 }
 
 async function search(input = {}) {
-  const mode = input.mode || "folder";
+  const rawMode = String(input.mode || "folder");
+  const mode = rawMode.startsWith("customFolder") ? "customFolder" : rawMode;
   const query = String(input.query || "").trim();
   const limit = Math.max(1, Math.min(Number(input.limit) || 60, 100));
 
@@ -702,6 +728,7 @@ window.bitwardenUtools = {
   getSettings,
   saveSettings,
   setCustomFolderName,
+  setCustomFolderNames,
   bootstrap,
   status,
   ensureReady,

@@ -18,7 +18,7 @@
         </div>
         <div class="top-actions">
           <button id="syncBtn" class="ghost" title="同步并刷新缓存 Ctrl+R">同步</button>
-          <button id="customFolderBtn" class="ghost" title="设置自定义文件夹筛选">自定义文件夹</button>
+          <button id="customFolderBtn" class="ghost" title="管理自定义文件夹筛选">自定义文件夹</button>
           <button id="settingsBtn" class="ghost" title="连接设置">设置</button>
         </div>
       </header>
@@ -69,6 +69,17 @@
         </div>
       </section>
 
+      <section id="customFolderPanel" class="panel hidden">
+        <h2>自定义文件夹</h2>
+        <p class="hint">可以添加多个常用文件夹。添加后，搜索模式下拉框会出现对应文件夹名称；未添加时不会显示自定义选项。</p>
+        <div class="folder-editor">
+          <input id="customFolderInput" autocomplete="off" spellcheck="false" placeholder="例如：totp" />
+          <button id="addCustomFolderBtn">添加</button>
+          <button id="closeCustomFolderBtn" class="ghost">关闭</button>
+        </div>
+        <div id="customFolderList" class="folder-tags"></div>
+      </section>
+
       <main id="searchPanel" class="hidden">
         <div class="searchbar">
           <select id="modeSelect" title="搜索模式">
@@ -76,7 +87,6 @@
             <option value="name">Name</option>
             <option value="url">URL</option>
             <option value="folder" selected>文件夹</option>
-            <option value="customFolder">自定义文件夹</option>
           </select>
           <input id="queryInput" spellcheck="false" autocomplete="off" placeholder="默认按文件夹搜索；支持 f: totp 或 f totp" />
         </div>

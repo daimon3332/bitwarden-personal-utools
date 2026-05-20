@@ -201,6 +201,36 @@ label {
   gap: 10px;
 }
 
+.folder-editor {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.folder-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.folder-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 8px 5px 10px;
+  background: var(--primary-weak);
+  color: var(--primary);
+}
+
+.folder-tag button {
+  padding: 2px 6px;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
 .searchbar {
   display: grid;
   grid-template-columns: 96px 1fr;

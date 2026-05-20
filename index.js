@@ -11,6 +11,8 @@
     busy: false,
     copyBusy: false,
     timer: null,
+    lastClickAt: 0,
+    lastClickIndex: -1,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -32,6 +34,11 @@
     unlockBtn: $("unlockBtn"),
     syncBtn: $("syncBtn"),
     customFolderBtn: $("customFolderBtn"),
+    customFolderPanel: $("customFolderPanel"),
+    customFolderInput: $("customFolderInput"),
+    addCustomFolderBtn: $("addCustomFolderBtn"),
+    closeCustomFolderBtn: $("closeCustomFolderBtn"),
+    customFolderList: $("customFolderList"),
     settingsBtn: $("settingsBtn"),
     mode: $("modeSelect"),
     query: $("queryInput"),
@@ -41,17 +48,71 @@
 
   function setBusy(busy) {
     state.busy = busy;
-    for (const btn of [els.loginBtn, els.checkBtn, els.unlockBtn, els.syncBtn, els.customFolderBtn]) {
+    for (const btn of [
+      els.loginBtn,
+      els.checkBtn,
+      els.unlockBtn,
+      els.syncBtn,
+      els.customFolderBtn,
+      els.addCustomFolderBtn,
+    ]) {
       btn.disabled = busy;
     }
   }
 
+  function customFolderNames() {
+    if (Array.isArray(state.settings?.customFolderNames)) return state.settings.customFolderNames;
+    return state.settings?.customFolderName ? [state.settings.customFolderName] : [];
+  }
+
+  function customFolderValue(name) {
+    return `customFolder:${encodeURIComponent(name)}`;
+  }
+
+  function selectedCustomFolderName(value = els.mode.value) {
+    if (!String(value || "").startsWith("customFolder:")) return "";
+    try {
+      return decodeURIComponent(String(value).slice("customFolder:".length));
+    } catch {
+      return String(value).slice("customFolder:".length);
+    }
+  }
+
   function updateCustomFolderUi() {
-    const name = state.settings?.customFolderName || "";
-    const label = name ? `文件夹：${name}` : "自定义文件夹";
-    els.customFolderBtn.textContent = label;
-    const option = els.mode.querySelector('option[value="customFolder"]');
-    if (option) option.textContent = name ? name : "自定义文件夹";
+    const names = customFolderNames();
+    const previousValue = els.mode.value;
+    els.customFolderBtn.textContent = names.length ? `自定义文件夹(${names.length})` : "自定义文件夹";
+
+    els.mode.querySelectorAll("option[data-custom-folder]").forEach((option) => option.remove());
+    for (const name of names) {
+      const option = document.createElement("option");
+      option.value = customFolderValue(name);
+      option.textContent = name;
+      option.dataset.customFolder = "true";
+      els.mode.appendChild(option);
+    }
+    if (previousValue.startsWith("customFolder:") && !names.includes(selectedCustomFolderName(previousValue))) {
+      els.mode.value = "folder";
+    } else if ([...els.mode.options].some((option) => option.value === previousValue)) {
+      els.mode.value = previousValue;
+    }
+
+    renderCustomFolderList();
+  }
+
+  function renderCustomFolderList() {
+    const names = customFolderNames();
+    els.customFolderList.innerHTML = "";
+    if (!names.length) {
+      els.customFolderList.innerHTML = '<span class="hint">还没有添加自定义文件夹。</span>';
+      return;
+    }
+    for (const name of names) {
+      const tag = document.createElement("span");
+      tag.className = "folder-tag";
+      tag.innerHTML = `<span>${escapeText(name)}</span><button class="ghost" data-remove-folder="${escapeText(name)}" title="删除">×</button>`;
+      els.customFolderList.appendChild(tag);
+    }
   }
 
   function setActionButtonsDisabled(disabled) {
@@ -203,7 +264,7 @@
         masterPassword: els.setupMasterPassword.value,
         bwPath: els.bwPath.value.trim(),
         serverUrl: els.serverUrl.value.trim(),
-        customFolderName: state.settings?.customFolderName || "",
+        customFolderNames: customFolderNames(),
         saveCredentials: els.saveCredential.checked,
       });
       els.setupMasterPassword.value = "";
@@ -232,7 +293,7 @@
         masterPassword: password,
         bwPath: els.bwPath.value.trim(),
         serverUrl: els.serverUrl.value.trim(),
-        customFolderName: state.settings?.customFolderName || "",
+        customFolderNames: customFolderNames(),
         saveCredentials: true,
       });
       await api.unlock(password);
@@ -248,7 +309,9 @@
   }
 
   function parseQuery() {
-    let mode = els.mode.value;
+    const selectedMode = els.mode.value;
+    let mode = selectedMode.startsWith("customFolder:") ? "customFolder" : selectedMode;
+    let customFolderName = selectedCustomFolderName(selectedMode);
     let query = els.query.value.trim();
     const matched = query.match(/^(n|name|u|url|f|folder)(?:\s*[:：]\s*|\s+)(.*)$/i);
     if (matched) {
@@ -257,8 +320,9 @@
       if (prefix === "n" || prefix === "name") mode = "name";
       if (prefix === "u" || prefix === "url") mode = "url";
       if (prefix === "f" || prefix === "folder") mode = "folder";
+      if (mode !== "customFolder") customFolderName = "";
     }
-    return { mode, query };
+    return { mode, query, customFolderName };
   }
 
   async function doSearch(force) {
@@ -271,7 +335,7 @@
       const res = await api.search({
         query: state.query,
         mode: state.mode,
-        customFolderName: state.settings?.customFolderName || "",
+        customFolderName: parsed.customFolderName,
         limit: 60,
         force: Boolean(force),
       });
@@ -328,7 +392,7 @@
     showMessage("正在同步 Bitwarden...");
     try {
       await api.sync();
-      showMessage("同步完成。");
+      showMessage("同步完成。", "success");
       await refreshStatus();
       await doSearch(false);
     } catch (err) {
@@ -339,26 +403,49 @@
   }
 
   async function setCustomFolder() {
-    if (!api) return;
-    const current = state.settings?.customFolderName || "";
-    const value = window.prompt("请输入自定义文件夹名称（例如：totp）", current);
-    if (value === null) return;
+    els.customFolderPanel.classList.toggle("hidden");
+    if (!els.customFolderPanel.classList.contains("hidden")) {
+      renderCustomFolderList();
+      setTimeout(() => els.customFolderInput.focus(), 30);
+    }
+  }
+
+  async function saveCustomFolders(names, message) {
     try {
-      state.settings = await api.setCustomFolderName(value.trim());
+      state.settings = await api.setCustomFolderNames(names);
       updateCustomFolderUi();
-      if (state.settings.customFolderName) {
-        els.mode.value = "customFolder";
-      }
-      showMessage(
-        state.settings.customFolderName
-          ? `自定义文件夹已设置为：${state.settings.customFolderName}`
-          : "已清空自定义文件夹",
-        "success",
-      );
-      await doSearch(false);
+      showMessage(message, "success");
+      return true;
     } catch (err) {
       showMessage(err.message || String(err), "error");
+      return false;
     }
+  }
+
+  async function addCustomFolder() {
+    if (!api) return;
+    const name = els.customFolderInput.value.trim();
+    if (!name) {
+      showMessage("请输入文件夹名称。", "error");
+      return;
+    }
+    const names = customFolderNames();
+    if (names.some((item) => item.toLowerCase() === name.toLowerCase())) {
+      showMessage(`文件夹 ${name} 已存在。`, "error");
+      return;
+    }
+    els.customFolderInput.value = "";
+    const ok = await saveCustomFolders([...names, name], `已添加自定义文件夹：${name}`);
+    if (!ok) return;
+    els.mode.value = customFolderValue(name);
+    await doSearch(false);
+  }
+
+  async function removeCustomFolder(name) {
+    const names = customFolderNames().filter((item) => item.toLowerCase() !== String(name).toLowerCase());
+    const ok = await saveCustomFolders(names, `已删除自定义文件夹：${name}`);
+    if (!ok) return;
+    await doSearch(false);
   }
 
   function moveSelection(delta) {
@@ -378,6 +465,18 @@
     });
     els.syncBtn.addEventListener("click", syncAndRefresh);
     els.customFolderBtn.addEventListener("click", setCustomFolder);
+    els.closeCustomFolderBtn.addEventListener("click", () => {
+      els.customFolderPanel.classList.add("hidden");
+    });
+    els.addCustomFolderBtn.addEventListener("click", addCustomFolder);
+    els.customFolderInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") addCustomFolder();
+    });
+    els.customFolderList.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-remove-folder]");
+      if (!button) return;
+      removeCustomFolder(button.dataset.removeFolder || "");
+    });
     els.settingsBtn.addEventListener("click", () => {
       els.setupPanel.classList.toggle("hidden");
     });
@@ -386,17 +485,18 @@
     els.results.addEventListener("click", (event) => {
       const li = event.target.closest(".result");
       if (!li) return;
-      state.selected = Number(li.dataset.index || 0);
+      const index = Number(li.dataset.index || 0);
+      state.selected = index;
       const button = event.target.closest("button");
       if (button) copy(button.dataset.action);
-      else renderResults();
-    });
-    els.results.addEventListener("dblclick", (event) => {
-      const li = event.target.closest(".result");
-      if (!li || event.target.closest("button")) return;
-      state.selected = Number(li.dataset.index || 0);
-      renderResults();
-      copy("totp");
+      else {
+        const now = Date.now();
+        const isDoubleClick = event.detail >= 2 || (state.lastClickIndex === index && now - state.lastClickAt < 420);
+        state.lastClickAt = now;
+        state.lastClickIndex = index;
+        if (isDoubleClick) copy("totp");
+        else renderResults();
+      }
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "ArrowDown") {
