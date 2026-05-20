@@ -8,6 +8,9 @@
   --primary: #175ddc;
   --primary-weak: #e9f0ff;
   --danger: #c23934;
+  --success: #07823f;
+  --success-weak: #e8f7ef;
+  --danger-weak: #fff0ef;
   --shadow: 0 12px 32px rgba(23, 32, 51, 0.08);
 }
 
@@ -21,6 +24,9 @@
     --primary: #6ea0ff;
     --primary-weak: #1c3158;
     --danger: #ff8a85;
+    --success: #5ee08f;
+    --success-weak: #123b25;
+    --danger-weak: #4b1f22;
     --shadow: 0 12px 32px rgba(0, 0, 0, 0.26);
   }
 }
@@ -181,6 +187,10 @@ label {
   gap: 8px;
 }
 
+.fullline {
+  grid-column: 1 / -1;
+}
+
 .checkline input {
   width: auto;
 }
@@ -219,11 +229,23 @@ label {
   padding: 10px 12px;
   color: var(--muted);
   background: var(--panel);
-  margin-bottom: 10px;
+  margin-top: 10px;
+  margin-bottom: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
 }
 
 .message.error {
   color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  background: var(--danger-weak);
+}
+
+.message.success {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 45%, var(--line));
+  background: var(--success-weak);
 }
 
 .results {

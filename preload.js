@@ -4,10 +4,12 @@ const crypto = require("node:crypto");
 const STORAGE_KEY = "bitwarden-utools-settings";
 const CACHE_KEY = "bitwarden-utools-cache";
 const CACHE_VERSION = 2;
+const DEFAULT_SERVER_URL = "https://vault.bitwarden.com";
 let sessionKey = "";
 let itemCache = [];
 let folderCache = new Map();
 let cacheLoadedAt = 0;
+let configuredServerUrl = "";
 
 function getStorage() {
   if (typeof utools !== "undefined" && utools.dbCryptoStorage) return utools.dbCryptoStorage;
@@ -49,6 +51,8 @@ function readSettings() {
     masterPassword: value.masterPassword || "",
     hasMasterPassword: Boolean(value.masterPassword),
     bwPath: value.bwPath || "",
+    serverUrl: value.serverUrl || DEFAULT_SERVER_URL,
+    customFolderName: value.customFolderName || "",
     saveCredentials: Boolean(value.saveCredentials),
     secureStorage: hasCryptoStorage(),
   };
@@ -61,9 +65,18 @@ function getSettings() {
     hasClientSecret: Boolean(settings.clientSecret),
     hasMasterPassword: settings.hasMasterPassword,
     bwPath: settings.bwPath,
+    serverUrl: settings.serverUrl || DEFAULT_SERVER_URL,
+    customFolderName: settings.customFolderName || "",
     saveCredentials: settings.saveCredentials,
     secureStorage: settings.secureStorage,
   };
+}
+
+function normalizeServerUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return DEFAULT_SERVER_URL;
+  if (/^https?:\/\//i.test(raw)) return raw.replace(/\/+$/, "");
+  return `https://${raw}`.replace(/\/+$/, "");
 }
 
 function saveSettings(input) {
@@ -73,6 +86,11 @@ function saveSettings(input) {
 
   const next = {
     bwPath: String(input?.bwPath || "").trim(),
+    serverUrl: normalizeServerUrl(input?.serverUrl || existing.serverUrl || DEFAULT_SERVER_URL),
+    customFolderName:
+      typeof input?.customFolderName === "string"
+        ? input.customFolderName.trim()
+        : existing.customFolderName || "",
     saveCredentials: Boolean(input?.saveCredentials),
   };
   if (next.saveCredentials) {
@@ -86,6 +104,22 @@ function saveSettings(input) {
     next.masterPassword = "";
   }
   storage.setItem(STORAGE_KEY, next);
+  return getSettings();
+}
+
+function setCustomFolderName(name) {
+  const storage = getStorage();
+  const existing = readSettings();
+  const next = {
+    clientId: existing.clientId,
+    clientSecret: existing.clientSecret,
+    masterPassword: existing.masterPassword,
+    bwPath: existing.bwPath,
+    serverUrl: existing.serverUrl || DEFAULT_SERVER_URL,
+    saveCredentials: existing.saveCredentials,
+    customFolderName: String(name || "").trim(),
+  };
+  storage?.setItem(STORAGE_KEY, next);
   return getSettings();
 }
 
@@ -115,6 +149,18 @@ function writePersistedCache(items) {
     items: itemCache,
     cacheLoadedAt,
   };
+}
+
+function clearPersistedCache() {
+  itemCache = [];
+  folderCache = new Map();
+  cacheLoadedAt = 0;
+  const storage = getStorage();
+  storage?.setItem(CACHE_KEY, {
+    cacheVersion: CACHE_VERSION,
+    items: [],
+    cacheLoadedAt: 0,
+  });
 }
 
 function hydrateCache() {
@@ -149,7 +195,7 @@ function bwPath() {
 function runBw(args, options = {}) {
   return new Promise((resolve, reject) => {
     const env = { ...process.env, ...(options.env || {}) };
-    if (sessionKey) env.BW_SESSION = sessionKey;
+    if (!options.noSession && sessionKey) env.BW_SESSION = sessionKey;
     const child = execFile(
       bwPath(),
       args,
@@ -169,6 +215,43 @@ function runBw(args, options = {}) {
     );
     child.stdin?.end();
   });
+}
+
+async function configureServer() {
+  const serverUrl = normalizeServerUrl(readSettings().serverUrl || DEFAULT_SERVER_URL);
+  if (configuredServerUrl === serverUrl) return { ok: true, serverUrl };
+
+  const current = await parseJsonCommand(["status"], { timeout: 12000, noSession: true }).catch(() => null);
+  const currentServerUrl = normalizeServerUrl(current?.serverUrl || "");
+  if (currentServerUrl === serverUrl) {
+    configuredServerUrl = serverUrl;
+    return { ok: true, serverUrl };
+  }
+
+  async function logoutForServerSwitch() {
+    sessionKey = "";
+    await runBw(["logout"], { timeout: 30000, noSession: true }).catch(() => "");
+  }
+
+  if (current?.status && current.status !== "unauthenticated") {
+    await logoutForServerSwitch();
+  }
+
+  try {
+    await runBw(["config", "server", serverUrl], { timeout: 30000, noSession: true });
+  } catch (err) {
+    if (/logout required before server config update/i.test(err.message || "")) {
+      await logoutForServerSwitch();
+      await runBw(["config", "server", serverUrl], { timeout: 30000, noSession: true });
+    } else {
+      throw err;
+    }
+  }
+
+  configuredServerUrl = serverUrl;
+  sessionKey = "";
+  clearPersistedCache();
+  return { ok: true, serverUrl };
 }
 
 async function parseJsonCommand(args, options) {
@@ -229,6 +312,7 @@ async function ensureSession() {
 }
 
 async function loginWithApiKey(input) {
+  await configureServer();
   const settings = readSettings();
   const clientId = String(input?.clientId || settings.clientId || "").trim();
   const clientSecret = String(input?.clientSecret || settings.clientSecret || "").trim();
@@ -252,6 +336,7 @@ async function loginWithApiKey(input) {
 }
 
 async function unlock(masterPassword) {
+  await configureServer();
   const password = String(masterPassword || "");
   if (!password) throw new Error("主密码不能为空。");
   const out = await runBw(["unlock", "--passwordenv", "BW_PASSWORD", "--raw"], {
@@ -267,6 +352,7 @@ async function unlock(masterPassword) {
 }
 
 async function sync() {
+  await configureServer();
   await ensureSession();
   const out = await runBw(["sync"], { timeout: 90000 });
   itemCache = [];
@@ -412,6 +498,13 @@ function scoreItem(item, query, mode) {
       best = Math.max(best, fieldScore(term, item.folderName, 1.7));
       best = Math.max(best, fieldScore(term, item.name, 0.9));
     }
+    if (mode === "customFolder") {
+      best = Math.max(best, fieldScore(term, item.name, 1.4));
+      best = Math.max(best, fieldScore(term, item.username, 1.0));
+      for (const uri of [...(item.uriHosts || []), ...(item.uris || [])]) {
+        best = Math.max(best, fieldScore(term, uri, 1.15));
+      }
+    }
     if (best <= 0) return 0;
     total += best;
   }
@@ -423,7 +516,15 @@ async function search(input = {}) {
   const query = String(input.query || "").trim();
   const limit = Math.max(1, Math.min(Number(input.limit) || 60, 100));
 
-  const items = await loadItems(Boolean(input.force));
+  let items = await loadItems(Boolean(input.force));
+  if (mode === "customFolder") {
+    const customFolderName = String(input.customFolderName || readSettings().customFolderName || "").trim().toLowerCase();
+    if (customFolderName) {
+      items = items.filter((item) => String(item.folderName || "").trim().toLowerCase() === customFolderName);
+    } else {
+      items = [];
+    }
+  }
 
   const ranked = items
     .map((item) => ({ item, score: scoreItem(item, query, mode) }))
@@ -589,14 +690,18 @@ async function copyTotp(id) {
 }
 
 async function copyUsername(id) {
-  const username = await getRawValue("username", id);
-  copyText(username);
-  return { ok: true, message: "已复制用户名。" };
+  const cached = cachedItemById(id);
+  const username = cached && Object.prototype.hasOwnProperty.call(cached, "username")
+    ? cached.username
+    : await getRawValue("username", id);
+  copyText(username, "用户名为空");
+  return { ok: true, message: "用户名复制成功" };
 }
 
 window.bitwardenUtools = {
   getSettings,
   saveSettings,
+  setCustomFolderName,
   bootstrap,
   status,
   ensureReady,

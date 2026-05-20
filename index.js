@@ -24,12 +24,14 @@
     clientSecret: $("clientSecretInput"),
     setupMasterPassword: $("setupMasterPasswordInput"),
     bwPath: $("bwPathInput"),
+    serverUrl: $("serverUrlInput"),
     saveCredential: $("saveCredentialInput"),
     loginBtn: $("loginBtn"),
     checkBtn: $("checkBtn"),
     masterPassword: $("masterPasswordInput"),
     unlockBtn: $("unlockBtn"),
     syncBtn: $("syncBtn"),
+    customFolderBtn: $("customFolderBtn"),
     settingsBtn: $("settingsBtn"),
     mode: $("modeSelect"),
     query: $("queryInput"),
@@ -39,9 +41,17 @@
 
   function setBusy(busy) {
     state.busy = busy;
-    for (const btn of [els.loginBtn, els.checkBtn, els.unlockBtn, els.syncBtn]) {
+    for (const btn of [els.loginBtn, els.checkBtn, els.unlockBtn, els.syncBtn, els.customFolderBtn]) {
       btn.disabled = busy;
     }
+  }
+
+  function updateCustomFolderUi() {
+    const name = state.settings?.customFolderName || "";
+    const label = name ? `文件夹：${name}` : "自定义文件夹";
+    els.customFolderBtn.textContent = label;
+    const option = els.mode.querySelector('option[value="customFolder"]');
+    if (option) option.textContent = name ? name : "自定义文件夹";
   }
 
   function setActionButtonsDisabled(disabled) {
@@ -55,11 +65,14 @@
       els.message.classList.add("hidden");
       els.message.textContent = "";
       els.message.classList.remove("error");
+      els.message.classList.remove("success");
       return;
     }
     els.message.textContent = text;
     els.message.classList.remove("hidden");
+    els.message.classList.remove("error", "success");
     els.message.classList.toggle("error", type === "error");
+    els.message.classList.toggle("success", type === "success");
   }
 
   function setStatusText(text) {
@@ -162,7 +175,9 @@
         ? "已保存，留空则不变"
         : "用于自动解锁，已保存可留空";
       els.bwPath.value = state.settings.bwPath || "";
+      els.serverUrl.value = state.settings.serverUrl || "https://vault.bitwarden.com";
       els.saveCredential.checked = Boolean(state.settings.saveCredentials);
+      updateCustomFolderUi();
 
       state.status = await api.bootstrap();
       setStatusText(formatStatus(state.status));
@@ -187,6 +202,8 @@
         clientSecret: els.clientSecret.value.trim(),
         masterPassword: els.setupMasterPassword.value,
         bwPath: els.bwPath.value.trim(),
+        serverUrl: els.serverUrl.value.trim(),
+        customFolderName: state.settings?.customFolderName || "",
         saveCredentials: els.saveCredential.checked,
       });
       els.setupMasterPassword.value = "";
@@ -214,6 +231,8 @@
         clientSecret: els.clientSecret.value.trim(),
         masterPassword: password,
         bwPath: els.bwPath.value.trim(),
+        serverUrl: els.serverUrl.value.trim(),
+        customFolderName: state.settings?.customFolderName || "",
         saveCredentials: true,
       });
       await api.unlock(password);
@@ -252,6 +271,7 @@
       const res = await api.search({
         query: state.query,
         mode: state.mode,
+        customFolderName: state.settings?.customFolderName || "",
         limit: 60,
         force: Boolean(force),
       });
@@ -293,7 +313,7 @@
       if (action === "password") res = await api.copyPassword(item.id);
       if (action === "totp") res = await api.copyTotp(item.id);
       if (action === "username") res = await api.copyUsername(item.id);
-      showMessage(res?.message || "已复制。");
+      showMessage(res?.message || "已复制。", "success");
     } catch (err) {
       showMessage(err.message || String(err), "error");
     } finally {
@@ -318,6 +338,29 @@
     }
   }
 
+  async function setCustomFolder() {
+    if (!api) return;
+    const current = state.settings?.customFolderName || "";
+    const value = window.prompt("请输入自定义文件夹名称（例如：totp）", current);
+    if (value === null) return;
+    try {
+      state.settings = await api.setCustomFolderName(value.trim());
+      updateCustomFolderUi();
+      if (state.settings.customFolderName) {
+        els.mode.value = "customFolder";
+      }
+      showMessage(
+        state.settings.customFolderName
+          ? `自定义文件夹已设置为：${state.settings.customFolderName}`
+          : "已清空自定义文件夹",
+        "success",
+      );
+      await doSearch(false);
+    } catch (err) {
+      showMessage(err.message || String(err), "error");
+    }
+  }
+
   function moveSelection(delta) {
     if (!state.results.length) return;
     state.selected = (state.selected + delta + state.results.length) % state.results.length;
@@ -334,6 +377,7 @@
       if (event.key === "Enter") unlock();
     });
     els.syncBtn.addEventListener("click", syncAndRefresh);
+    els.customFolderBtn.addEventListener("click", setCustomFolder);
     els.settingsBtn.addEventListener("click", () => {
       els.setupPanel.classList.toggle("hidden");
     });
@@ -346,6 +390,13 @@
       const button = event.target.closest("button");
       if (button) copy(button.dataset.action);
       else renderResults();
+    });
+    els.results.addEventListener("dblclick", (event) => {
+      const li = event.target.closest(".result");
+      if (!li || event.target.closest("button")) return;
+      state.selected = Number(li.dataset.index || 0);
+      renderResults();
+      copy("totp");
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "ArrowDown") {

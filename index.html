@@ -10,14 +10,15 @@
     <div id="app">
       <header class="topbar">
         <div class="brand">
-          <img src="./logo.svg" alt="" />
+          <img src="./logo-v2.png" alt="" />
           <div>
             <h1>Bitwarden</h1>
-            <p id="statusText">正在检查 CLI 状态...</p>
+            <p id="statusText">正在加载本地缓存...</p>
           </div>
         </div>
         <div class="top-actions">
           <button id="syncBtn" class="ghost" title="同步并刷新缓存 Ctrl+R">同步</button>
+          <button id="customFolderBtn" class="ghost" title="设置自定义文件夹筛选">自定义文件夹</button>
           <button id="settingsBtn" class="ghost" title="连接设置">设置</button>
         </div>
       </header>
@@ -25,7 +26,7 @@
       <section id="setupPanel" class="panel hidden">
         <h2>连接 Bitwarden CLI</h2>
         <p class="hint">
-          一次性保存 Client ID、Client Secret 和主密码。插件只在首次配置或手动同步时连接 CLI 并更新本地缓存。
+          一次性保存 Client ID、Client Secret、主密码和服务地址。插件只在首次配置或手动同步时连接 CLI 并更新本地缓存。
         </p>
         <div class="grid">
           <label>
@@ -43,6 +44,10 @@
           <label>
             bw 路径
             <input id="bwPathInput" autocomplete="off" spellcheck="false" placeholder="默认：bw" />
+          </label>
+          <label class="fullline">
+            Bitwarden 服务地址
+            <input id="serverUrlInput" autocomplete="off" spellcheck="false" placeholder="https://vault.bitwarden.com" />
           </label>
           <label class="checkline">
             <input id="saveCredentialInput" type="checkbox" checked />
@@ -71,19 +76,20 @@
             <option value="name">Name</option>
             <option value="url">URL</option>
             <option value="folder" selected>文件夹</option>
+            <option value="customFolder">自定义文件夹</option>
           </select>
           <input id="queryInput" spellcheck="false" autocomplete="off" placeholder="默认按文件夹搜索；支持 f: totp 或 f totp" />
         </div>
 
         <div class="tips">
-          <span>Enter 复制 TOTP</span>
+          <span>Enter / 双击 复制 TOTP</span>
           <span>Ctrl+T 复制密码</span>
           <span>Ctrl+U 复制用户名</span>
           <span>↑↓ 选择</span>
         </div>
 
-        <div id="message" class="message hidden"></div>
         <ul id="results" class="results"></ul>
+        <div id="message" class="message hidden"></div>
       </main>
     </div>
 
